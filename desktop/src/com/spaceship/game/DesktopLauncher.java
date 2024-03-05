@@ -8,6 +8,7 @@ import com.spaceship.game.Spceship;
 public class DesktopLauncher {
 	public static void main (String[] arg) {
 		Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
+		config.setWindowedMode(1024, 512);
 		config.setForegroundFPS(60);
 		config.setTitle("Spaceship");
 		new Lwjgl3Application(new Spceship(), config);
