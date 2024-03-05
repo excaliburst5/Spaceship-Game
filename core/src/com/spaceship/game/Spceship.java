@@ -3,8 +3,11 @@ package com.spaceship.game;
 import java.util.Iterator;
 
 import com.badlogic.gdx.ApplicationAdapter;
+import com.badlogic.gdx.Audio;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -47,18 +50,23 @@ public class Spceship extends ApplicationAdapter {
 	private float shipVelocityX = 100;
 	private float shipVelocityY = 200;
 	private float backWardThrust = 120;
-	private float acceleration = 250;
 	private float brakeTimer = 0;
 	private boolean upwardThruster = false;
 	private boolean downwardThruster = false;
 	private float distanceTraveled = 0.0f;
-	
+	private int score = 0;
 	//Asteroid
 	private Texture asteroidImage;
 	private Array<Rectangle> asteroids;
 	private float lastAsteroidSpawn;
 	
-	private int score;
+	//sounds
+	private Sound thrusterSound;
+	private Sound reverseThrusterSound;
+	private Sound shipExplosionSound;
+	
+	private Music playingAudio;
+	private Music notPlayingAudio;
 	
 	GameState gameState = GameState.Start;
 	
@@ -70,6 +78,18 @@ public class Spceship extends ApplicationAdapter {
 		font_18 = new BitmapFont(Gdx.files.internal("fonts/EBDragon18/EightBitDragon-18.fnt"), Gdx.files.internal("fonts/EBDragon18/EightBitDragon-18.png"),false);
 		font_32 = new BitmapFont(Gdx.files.internal("fonts/EBDragon32/EightBitDragon-32.fnt"), Gdx.files.internal("fonts/EBDragon32/EightBitDragon-32.png"), false);
 	
+		//Sound effects
+		thrusterSound = Gdx.audio.newSound(Gdx.files.internal("soundEffect/rocket-boost-engine-loop.wav"));
+		reverseThrusterSound = Gdx.audio.newSound(Gdx.files.internal("soundEffect/engine-power-up_1.wav"));
+		shipExplosionSound = Gdx.audio.newSound(Gdx.files.internal("soundEffect/ship_explosion.wav"));
+		
+		//Game ambience
+		playingAudio = Gdx.audio.newMusic(Gdx.files.internal("ambiance/spaceship-Ambience.mp3"));
+		notPlayingAudio = Gdx.audio.newMusic(Gdx.files.internal("ambiance/space-Ambience.mp3"));
+		
+		notPlayingAudio.setLooping(true);
+		playingAudio.setLooping(true);
+		
 		ship = new Rectangle();
 		ship.x = 50; 
 		ship.y = 512 / 2 - 64 / 2 ; 
@@ -99,41 +119,48 @@ public class Spceship extends ApplicationAdapter {
 	public void updateGame() {
 		
 		if(gameState == GameState.Start) {
+			notPlayingAudio.play();
 			batch.begin();
 			batch.draw(spacebackground, 0, -105, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 			font_32.draw(batch, "Spaceship", 400,280);
-			font_18.draw(batch, "Press [SPACE] to start" ,370, 210);
+			font_18.draw(batch, "Press [ENTER] to start" ,370, 210);
 			batch.end();
 		}
 		if(gameState == GameState.Playing) {
-			draw();
+			notPlayingAudio.stop();
+			playingAudio.play();
+			score = 0;
+			drawGame();
 		}
 		if(gameState == GameState.Gameover) {
-			resetWorld();
+			playingAudio.stop();
+			notPlayingAudio.play();
 			batch.begin();
 			batch.draw(spacebackground, 0, -105, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-			font_32.draw(batch, "Game Over! Your Score " + (int)(Math.round(distanceTraveled)), 250,280);
-			font_18.draw(batch, "Press [SPACE] to start" ,370, 210);
+			font_32.draw(batch, "Game Over! Your Score " + score, 250,280);
+			font_18.draw(batch, "Press [ENTER] to start" ,370, 210);
 			batch.end();
+			resetWorld();
 		}
 		
-		if(Gdx.input.isKeyPressed(Input.Keys.SPACE)) gameState = GameState.Playing;
+		if(Gdx.input.isKeyPressed(Input.Keys.ENTER)) gameState = GameState.Playing;
 		
 		//ship Controlls
 		shipMovement();
 		if(upwardThruster) {
+			//thrusterSound.play();
 			ship.y += shipVelocityY * Gdx.graphics.getDeltaTime(); 
 			ship.x += shipVelocityX * Gdx.graphics.getDeltaTime();
 		}
 		if(downwardThruster){
+			//thrusterSound.loop();
 			ship.y -= shipVelocityY * Gdx.graphics.getDeltaTime(); 
 			ship.x += shipVelocityX * Gdx.graphics.getDeltaTime();
 		}
 		
-		moveAsteroid();
 	}
 	
-	public void draw() {
+	public void drawGame() {
 		//Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 		getDistanceTraveled(Gdx.graphics.getDeltaTime());
 		update(Gdx.graphics.getDeltaTime());
@@ -145,6 +172,9 @@ public class Spceship extends ApplicationAdapter {
 			batch.draw(asteroidImage, asteroid.x, asteroid.y);
 		}
 		batch.end();
+		
+		moveAsteroid();
+		
 	}
 	
 	public void update(float dt) {
@@ -173,10 +203,11 @@ public class Spceship extends ApplicationAdapter {
 		 */
 		if(Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
 			brakeTimer += Gdx.graphics.getDeltaTime();
-			
+			//thrusterSound.stop();
 			if(brakeTimer > 0.2f) {
 				if(upwardThruster)upwardThruster = false;
 				if(downwardThruster)downwardThruster = false;
+				
 			}
 		}else brakeTimer = 0.0f;
 
@@ -201,18 +232,17 @@ public class Spceship extends ApplicationAdapter {
 			if(asteroid.x + 64 < 0) iter.remove();//if asteroid reach x = 0 then remove them
 			
 			if(asteroid.overlaps(ship)) {//if hit set Gamestate to gameover
+				shipExplosionSound.play();
 				gameState = GameState.Gameover;
+				score = (int)(Math.round(distanceTraveled));
+				
 			}
 		}
 	}
 	
 	public void getDistanceTraveled(float dt) {
-		distanceTraveled += 10.0f * dt; 
-		System.out.println(distanceTraveled);
-		//distanceLabel.setText("Distance Traveled: " + (int)(Math.round(distanceTraveled)));
-		if(gameState == GameState.Gameover) {
-			score = (int)(Math.round(distanceTraveled));
-		}
+		distanceTraveled += 5.0f * dt; 
+		//System.out.println(distanceTraveled);
 	}
 	
 	private void resetWorld() {
@@ -223,6 +253,8 @@ public class Spceship extends ApplicationAdapter {
 		//off the thruster
 		upwardThruster = false;
 		downwardThruster = false;
+		
+		distanceTraveled = 0;
 		
 		asteroids.clear();
 	}
@@ -235,6 +267,11 @@ public class Spceship extends ApplicationAdapter {
 		font_32.dispose();
 		shipImage.dispose();
 		asteroidImage.dispose();
+		notPlayingAudio.dispose();
+		playingAudio.dispose();
+		thrusterSound.dispose();
+		reverseThrusterSound.dispose();
+		shipExplosionSound.dispose();
 	}
 	
 	static enum GameState {
